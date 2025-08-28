@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Admin Panel — Nedd Digital</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-5xl mx-auto py-10 px-4">
+    <h1 class="text-3xl font-bold mb-6">Admin Panel</h1>
+
+    <!-- Password Check -->
+    <div id="passwordSection" class="space-y-4">
+      <p>Enter Admin Password:</p>
+      <input id="adminPass" type="password" class="border px-4 py-2 rounded" />
+      <button id="loginBtn" class="px-4 py-2 bg-sky-900 text-white rounded">Login</button>
+      <p id="errorMsg" class="text-red-600 hidden">❌ Wrong password</p>
+    </div>
+
+    <!-- Tabs -->
+    <div id="adminSection" class="hidden">
+      <div class="flex gap-4 mb-6">
+        <button id="tabTestimonials" class="px-4 py-2 bg-sky-900 text-white rounded">Testimonials</button>
+        <button id="tabContacts" class="px-4 py-2 bg-gray-300 rounded">Clients Contact</button>
+      </div>
+
+      <!-- Testimonials -->
+      <div id="testimonialSection">
+        <div id="pendingTestimonials" class="grid gap-4 mt-4"></div>
+      </div>
+
+      <!-- Clients Contact -->
+      <div id="contactSection" class="hidden">
+        <div id="clientContacts" class="grid gap-4 mt-4"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>
