@@ -1,42 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Admin Panel — Nedd Digital</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nedd Digital Admin Panel</title>
+  <script type="module" src="admin.js" defer></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 text-slate-900">
-  <div class="max-w-5xl mx-auto py-10 px-4">
-    <h1 class="text-3xl font-bold mb-6">Admin Panel</h1>
+<body class="bg-gray-100 min-h-screen flex flex-col">
 
-    <!-- Password Check -->
-    <div id="passwordSection" class="space-y-4">
-      <p>Enter Admin Password:</p>
-      <input id="adminPass" type="password" class="border px-4 py-2 rounded" />
-      <button id="loginBtn" class="px-4 py-2 bg-sky-900 text-white rounded">Login</button>
-      <p id="errorMsg" class="text-red-600 hidden">❌ Wrong password</p>
+  <!-- Header -->
+  <header class="bg-sky-900 text-white p-4 flex justify-between items-center">
+    <h1 class="text-lg md:text-xl font-bold">Nedd Digital Admin Panel</h1>
+    <button id="logoutBtn" class="bg-red-600 px-3 py-1 rounded hidden text-sm md:text-base">Logout</button>
+  </header>
+
+  <!-- Password Section -->
+  <section id="passwordSection" class="flex-grow flex items-center justify-center p-4">
+    <div class="bg-white shadow-lg rounded-xl p-6 w-full max-w-sm">
+      <h2 class="text-lg font-bold text-center mb-4">Admin Login</h2>
+      <input type="password" id="adminPass" placeholder="Enter Password"
+        class="w-full border rounded p-2 mb-3">
+      <button id="loginBtn" class="w-full bg-sky-900 text-white py-2 rounded">Login</button>
+      <p id="errorMsg" class="text-red-600 text-sm mt-2 hidden">Invalid password. Try again.</p>
+    </div>
+  </section>
+
+  <!-- Admin Section -->
+  <section id="adminSection" class="hidden p-4 md:p-6 flex-grow">
+    
+    <!-- Tabs -->
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button id="tabTestimonials" class="px-3 md:px-4 py-2 bg-sky-900 text-white rounded text-sm md:text-base">Testimonials</button>
+      <button id="tabContacts" class="px-3 md:px-4 py-2 bg-gray-300 rounded text-sm md:text-base">Contacts</button>
+      <button id="tabSlots" class="px-3 md:px-4 py-2 bg-gray-300 rounded text-sm md:text-base">Manage Slots</button>
     </div>
 
-    <!-- Tabs -->
-    <div id="adminSection" class="hidden">
-      <div class="flex gap-4 mb-6">
-        <button id="tabTestimonials" class="px-4 py-2 bg-sky-900 text-white rounded">Testimonials</button>
-        <button id="tabContacts" class="px-4 py-2 bg-gray-300 rounded">Clients Contact</button>
+    <!-- Testimonials Section -->
+    <div id="testimonialSection">
+      <h2 class="text-lg font-bold mb-3">Pending Testimonials</h2>
+      <div id="pendingTestimonials" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </div>
+
+    <!-- Contacts Section -->
+    <div id="contactSection" class="hidden">
+      <h2 class="text-lg font-bold mb-3">Client Contacts</h2>
+      <div id="clientContacts" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </div>
+
+    <!-- Slots Section -->
+    <div id="slotSection" class="hidden">
+      <h2 class="text-lg font-bold mb-3">Manage Available Slots</h2>
+
+      <!-- Add Slot -->
+      <div class="bg-white shadow rounded-xl p-4 mb-4 flex flex-col md:flex-row gap-2 md:items-center">
+        <h3 class="font-bold mb-2 md:mb-0">Add New Slot</h3>
+        <div class="flex flex-col md:flex-row gap-2 w-full">
+          <input type="date" id="slotDate" class="border rounded p-2 flex-1">
+          <input type="time" id="slotTime" class="border rounded p-2 flex-1">
+          <button id="addSlotBtn" class="bg-green-600 text-white px-3 py-2 rounded w-full md:w-auto">Add Slot</button>
+        </div>
       </div>
 
-      <!-- Testimonials -->
-      <div id="testimonialSection">
-        <div id="pendingTestimonials" class="grid gap-4 mt-4"></div>
+      <!-- Slot List -->
+      <div>
+        <h3 class="font-bold mb-2">Available Slots</h3>
+        <div id="slotList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
       </div>
+    </div>
+  </section>
 
-      <!-- Clients Contact -->
-      <div id="contactSection" class="hidden">
-        <div id="clientContacts" class="grid gap-4 mt-4"></div>
-      </div>
+  <!-- ================= Edit Contact Modal ================= -->
+  <div id="editContactModal" class="fixed inset-0 hidden bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-lg w-11/12 max-w-md p-6 relative">
+      <h2 class="text-lg font-bold mb-4">Edit Contact</h2>
+      <form id="editContactForm" class="space-y-3">
+        <input type="text" id="editName" placeholder="Name" class="w-full border rounded p-2">
+        <input type="email" id="editEmail" placeholder="Email" class="w-full border rounded p-2">
+        <input type="text" id="editPhone" placeholder="Phone" class="w-full border rounded p-2">
+        <input type="date" id="editDate" class="w-full border rounded p-2">
+        <input type="time" id="editTime" class="w-full border rounded p-2">
+        <div class="flex justify-end gap-2 pt-4">
+          <button type="button" id="cancelEditBtn" class="bg-gray-400 text-white px-3 py-1 rounded">Cancel</button>
+          <button type="submit" class="bg-sky-900 text-white px-3 py-1 rounded">Save</button>
+        </div>
+      </form>
     </div>
   </div>
 
-  <script type="module" src="admin.js"></script>
 </body>
 </html>
