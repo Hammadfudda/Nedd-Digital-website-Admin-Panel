@@ -4,14 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nedd Digital Admin Panel</title>
-  <script type="module" src="admin.js" defer></script>
+  <script type="module" src="script.js" defer></script>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
 
   <!-- Header -->
   <header class="bg-sky-900 text-white p-4 flex justify-between items-center">
-    <h1 class="text-lg md:text-xl font-bold">Nedd Digital Admin Panel</h1>
+    <div class="flex items-center gap-3">
+      <img src="https://nedddigital.netlify.app/images/nedddigitallogo.png" alt="Logo" class="h-8 md:h-10">
+      <h1 class="text-lg md:text-xl font-bold">Nedd Digital Admin Panel</h1>
+    </div>
     <button id="logoutBtn" class="bg-red-600 px-3 py-1 rounded hidden text-sm md:text-base">Logout</button>
   </header>
 
@@ -19,9 +22,11 @@
   <section id="passwordSection" class="flex-grow flex items-center justify-center p-4">
     <div class="bg-white shadow-lg rounded-xl p-6 w-full max-w-sm">
       <h2 class="text-lg font-bold text-center mb-4">Admin Login</h2>
-      <input type="password" id="adminPass" placeholder="Enter Password"
-        class="w-full border rounded p-2 mb-3">
-      <button id="loginBtn" class="w-full bg-sky-900 text-white py-2 rounded">Login</button>
+      <form id="loginForm" onsubmit="return false;" class="space-y-3">
+        <input type="password" id="adminPass" placeholder="Enter Password"
+          class="w-full border rounded p-2 mb-3">
+        <button type="submit" id="loginBtn" class="w-full bg-sky-900 text-white py-2 rounded">Login</button>
+      </form>
       <p id="errorMsg" class="text-red-600 text-sm mt-2 hidden">Invalid password. Try again.</p>
     </div>
   </section>
@@ -33,7 +38,7 @@
     <div class="flex flex-wrap gap-2 mb-6">
       <button id="tabTestimonials" class="px-3 md:px-4 py-2 bg-sky-900 text-white rounded text-sm md:text-base">Testimonials</button>
       <button id="tabContacts" class="px-3 md:px-4 py-2 bg-gray-300 rounded text-sm md:text-base">Contacts</button>
-      <button id="tabSlots" class="px-3 md:px-4 py-2 bg-gray-300 rounded text-sm md:text-base">Manage Slots</button>
+      <button id="tabEmailTracking" class="px-3 md:px-4 py-2 bg-gray-300 rounded text-sm md:text-base">Email Tracking</button>
     </div>
 
     <!-- Testimonials Section -->
@@ -48,43 +53,56 @@
       <div id="clientContacts" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
     </div>
 
-    <!-- Slots Section -->
-    <div id="slotSection" class="hidden">
-      <h2 class="text-lg font-bold mb-3">Manage Available Slots</h2>
+    <!-- Email Tracking Section -->
+    <div id="emailTrackingSection" class="hidden">
+      <h2 class="text-lg font-bold mb-4">Email Tracking System</h2>
 
-      <!-- Add Slot -->
-      <div class="bg-white shadow rounded-xl p-4 mb-4 flex flex-col md:flex-row gap-2 md:items-center">
-        <h3 class="font-bold mb-2 md:mb-0">Add New Slot</h3>
-        <div class="flex flex-col md:flex-row gap-2 w-full">
-          <input type="date" id="slotDate" class="border rounded p-2 flex-1">
-          <input type="time" id="slotTime" class="border rounded p-2 flex-1">
-          <button id="addSlotBtn" class="bg-green-600 text-white px-3 py-2 rounded w-full md:w-auto">Add Slot</button>
-        </div>
+      <!-- Add Gmail Form -->
+      <div class="bg-white shadow rounded-xl p-4 mb-6">
+        <h3 class="font-bold mb-3">Add New Gmail Account</h3>
+        <form id="addGmailForm" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input type="text" id="gmailName" placeholder="Gmail Account Name (e.g., Gmail 1)" 
+            class="border rounded p-2" required>
+          <input type="email" id="startEmail" placeholder="Start Email Address" 
+            class="border rounded p-2" required>
+          <input type="email" id="endEmail" placeholder="End Email Address" 
+            class="border rounded p-2" required>
+          <button type="submit" class="md:col-span-3 bg-sky-900 text-white py-2 rounded">
+            Add Gmail Account
+          </button>
+        </form>
       </div>
 
-      <!-- Slot List -->
+      <!-- Today's Due Emails -->
+      <div class="mb-6">
+        <h3 class="font-bold mb-3 text-amber-600">📧 Today's Due Emails</h3>
+        <div id="todayDueList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- All Gmail Accounts -->
       <div>
-        <h3 class="font-bold mb-2">Available Slots</h3>
-        <div id="slotList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+        <h3 class="font-bold mb-3">All Gmail Accounts</h3>
+        <div id="gmailAccountsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </div>
     </div>
   </section>
 
-  <!-- ================= Edit Contact Modal ================= -->
-  <div id="editContactModal" class="fixed inset-0 hidden bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-xl shadow-lg w-11/12 max-w-md p-6 relative">
-      <h2 class="text-lg font-bold mb-4">Edit Contact</h2>
-      <form id="editContactForm" class="space-y-3">
-        <input type="text" id="editName" placeholder="Name" class="w-full border rounded p-2">
-        <input type="email" id="editEmail" placeholder="Email" class="w-full border rounded p-2">
-        <input type="text" id="editPhone" placeholder="Phone" class="w-full border rounded p-2">
-        <input type="date" id="editDate" class="w-full border rounded p-2">
-        <input type="time" id="editTime" class="w-full border rounded p-2">
-        <div class="flex justify-end gap-2 pt-4">
-          <button type="button" id="cancelEditBtn" class="bg-gray-400 text-white px-3 py-1 rounded">Cancel</button>
-          <button type="submit" class="bg-sky-900 text-white px-3 py-1 rounded">Save</button>
-        </div>
-      </form>
+  <!-- ================= Custom Confirmation Popup ================= -->
+  <div id="confirmPopup" class="fixed inset-0 hidden bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-lg w-11/12 max-w-md p-6 text-center">
+      <h2 id="confirmMessage" class="text-lg font-bold mb-6">Are you sure?</h2>
+      <div class="flex justify-center gap-4">
+        <button id="confirmCancel" class="bg-gray-400 text-white px-4 py-2 rounded">Cancel</button>
+        <button id="confirmOk" class="bg-red-600 text-white px-4 py-2 rounded">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Loader Popup ================= -->
+  <div id="loaderPopup" class="fixed inset-0 hidden bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-6 shadow text-center">
+      <div class="loader border-t-4 border-b-4 border-sky-900 w-12 h-12 rounded-full animate-spin mx-auto"></div>
+      <p class="mt-3 font-medium">Processing...</p>
     </div>
   </div>
 
