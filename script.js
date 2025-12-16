@@ -24,6 +24,24 @@ const PASS = "03172052765";
 function showLoader() { document.getElementById("loaderPopup").classList.remove("hidden"); }
 function hideLoader() { document.getElementById("loaderPopup").classList.add("hidden"); }
 
+// ---------------- Alert Popup ----------------
+function showAlert(message) {
+  const overlay = document.createElement("div");
+  overlay.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50";
+  
+  const popup = document.createElement("div");
+  popup.className = "bg-white rounded-xl shadow-lg p-6 text-center max-w-sm mx-4";
+  popup.innerHTML = `
+    <p class="text-lg font-semibold mb-4">${message}</p>
+    <button onclick="this.closest('.fixed').remove()" class="px-6 py-2 bg-sky-900 text-white rounded hover:bg-sky-800">
+      OK
+    </button>
+  `;
+  
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+}
+
 // ---------------- Login ----------------
 const loginBtn = document.getElementById("loginBtn");
 loginBtn.addEventListener("click", loginHandler);
@@ -232,7 +250,7 @@ window.openEditContactPopup = async function (id) {
   const snapshot = await getDocs(query(collection(db, "contacts")));
   let contactData = null;
   snapshot.forEach((docSnap) => { if (docSnap.id === id) contactData = docSnap.data(); });
-  if (!contactData) return alert("Contact not found!");
+  if (!contactData) return showAlert("Contact not found!");
   createEditContactPopup(contactData, id);
 };
 
@@ -282,7 +300,7 @@ if (addGmailForm) {
     const endEmail = document.getElementById("endEmail").value.trim();
     
     if (!gmailName || !startEmail || !endEmail) {
-      alert("Please fill all fields");
+      showAlert("Please fill all fields");
       return;
     }
     
@@ -302,11 +320,11 @@ if (addGmailForm) {
       await loadGmailAccounts();
       await loadTodayDue();
       hideLoader();
-      alert("Gmail account added successfully!");
+      showAlert("Gmail account added successfully!");
     } catch (err) {
       console.error(err);
       hideLoader();
-      alert("Failed to add account");
+      showAlert("Failed to add account");
     }
   });
 }
@@ -465,7 +483,7 @@ window.markAsSent = async function(id) {
     
     if (!currentData) {
       hideLoader();
-      alert("Account not found");
+      showAlert("Account not found");
       return;
     }
     
@@ -477,10 +495,10 @@ window.markAsSent = async function(id) {
     });
     
     if (newStage >= 4) {
-      alert("🎉 All emails completed for this account!");
+      showAlert("🎉 All emails completed for this account!");
     } else {
       const dayIntervals = [0, 3, 9, 12];
-      alert(`✅ Marked as sent! Next email in ${dayIntervals[newStage]} days.`);
+      showAlert(`✅ Marked as sent! Next email in ${dayIntervals[newStage]} days.`);
     }
     
     await loadGmailAccounts();
@@ -489,7 +507,7 @@ window.markAsSent = async function(id) {
   } catch (err) {
     console.error(err);
     hideLoader();
-    alert("Failed to update");
+    showAlert("Failed to update");
   }
 };
 
@@ -542,7 +560,7 @@ function createEditGmailPopup(data, id) {
     await loadGmailAccounts();
     await loadTodayDue();
     hideLoader();
-    alert("Gmail account updated successfully!");
+    showAlert("Gmail account updated successfully!");
   });
 }
 
@@ -550,7 +568,7 @@ window.openEditGmailPopup = async function (id) {
   const snapshot = await getDocs(query(collection(db, "gmailAccounts")));
   let gmailData = null;
   snapshot.forEach((docSnap) => { if (docSnap.id === id) gmailData = docSnap.data(); });
-  if (!gmailData) return alert("Gmail account not found!");
+  if (!gmailData) return showAlert("Gmail account not found!");
   createEditGmailPopup(gmailData, id);
 };
 
@@ -563,11 +581,11 @@ window.deleteGmail = async function(id) {
       await loadGmailAccounts();
       await loadTodayDue();
       hideLoader();
-      alert("Gmail account deleted");
+      showAlert("Gmail account deleted");
     } catch (err) {
       console.error(err);
       hideLoader();
-      alert("Failed to delete");
+      showAlert("Failed to delete");
     }
   });
 };
