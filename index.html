@@ -9,7 +9,7 @@
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col">
 
-  <!-- Header - Fully Responsive -->
+  <!-- Header -->
   <header class="bg-sky-900 text-white p-3 sm:p-4">
     <div class="flex flex-col sm:flex-row justify-between items-center gap-3">
       <div class="flex items-center gap-2 sm:gap-3">
@@ -20,7 +20,7 @@
     </div>
   </header>
 
-  <!-- Password Section - Fully Responsive -->
+  <!-- Password Section -->
   <section id="passwordSection" class="flex-grow flex items-center justify-center p-3 sm:p-4">
     <div class="bg-white shadow-lg rounded-xl p-5 sm:p-6 w-full max-w-sm mx-3">
       <h2 class="text-base sm:text-lg font-bold text-center mb-3 sm:mb-4">Admin Login</h2>
@@ -33,42 +33,47 @@
     </div>
   </section>
 
-  <!-- Admin Section - Fully Responsive -->
+  <!-- Admin Section -->
   <section id="adminSection" class="hidden p-3 sm:p-4 md:p-6 flex-grow">
     
-    <!-- Tabs - Fully Responsive -->
+    <!-- Tabs -->
     <div class="flex flex-wrap gap-2 mb-4 sm:mb-6">
       <button id="tabTestimonials" class="flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 bg-sky-900 text-white rounded text-xs sm:text-sm md:text-base whitespace-nowrap">Testimonials</button>
       <button id="tabContacts" class="flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-300 rounded text-xs sm:text-sm md:text-base whitespace-nowrap">Contacts</button>
       <button id="tabEmailTracking" class="flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-300 rounded text-xs sm:text-sm md:text-base whitespace-nowrap">Email Tracking</button>
     </div>
 
-    <!-- Testimonials Section - Fully Responsive -->
+    <!-- Testimonials Section -->
     <div id="testimonialSection">
       <h2 class="text-base sm:text-lg font-bold mb-3">Pending Testimonials</h2>
       <div id="pendingTestimonials" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"></div>
     </div>
 
-    <!-- Contacts Section - Fully Responsive -->
+    <!-- Contacts Section -->
     <div id="contactSection" class="hidden">
       <h2 class="text-base sm:text-lg font-bold mb-3">Client Contacts</h2>
       <div id="clientContacts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"></div>
     </div>
 
-    <!-- Email Tracking Section - Fully Responsive -->
+    <!-- Email Tracking Section -->
     <div id="emailTrackingSection" class="hidden">
-      <!-- Header with Add Button - Fully Responsive -->
+      <!-- Header with Buttons -->
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
         <h2 class="text-base sm:text-lg font-bold">Email Tracking System</h2>
-        <button id="addGmailBtn" class="w-full sm:w-auto bg-green-600 text-white px-3 sm:px-4 py-2 rounded hover:bg-green-700 text-xs sm:text-sm md:text-base whitespace-nowrap">
-          + Add Gmail Account
-        </button>
+        <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <button id="patternSettingsBtn" class="w-full sm:w-auto bg-purple-600 text-white px-3 sm:px-4 py-2 rounded hover:bg-purple-700 text-xs sm:text-sm md:text-base whitespace-nowrap">
+            ⚙️ Pattern Settings
+          </button>
+          <button id="addGmailBtn" class="w-full sm:w-auto bg-green-600 text-white px-3 sm:px-4 py-2 rounded hover:bg-green-700 text-xs sm:text-sm md:text-base whitespace-nowrap">
+            + Add Gmail Account
+          </button>
+        </div>
       </div>
 
-      <!-- Add Email Campaign Form - Fully Responsive -->
+      <!-- Add Email Campaign Form -->
       <div class="bg-white shadow rounded-xl p-3 sm:p-4 mb-4 sm:mb-6">
         <h3 class="text-sm sm:text-base font-bold mb-3">Add New Email Campaign</h3>
-        <form id="addGmailForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+        <form id="addGmailForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <select id="gmailName" class="border rounded p-2 text-sm sm:text-base" required>
             <option value="">Select Gmail Account</option>
           </select>
@@ -76,19 +81,32 @@
             class="border rounded p-2 text-sm sm:text-base" required>
           <input type="email" id="endEmail" placeholder="End Email Address" 
             class="border rounded p-2 text-sm sm:text-base" required>
-          <button type="submit" class="sm:col-span-2 lg:col-span-3 bg-sky-900 text-white py-2 rounded text-sm sm:text-base">
+          <input type="text" id="campaignLabel" placeholder="Label (Optional)" 
+            class="border rounded p-2 text-sm sm:text-base">
+          <div class="sm:col-span-2 lg:col-span-4">
+            <label class="flex items-center gap-2 text-xs sm:text-sm mb-2">
+              <input type="checkbox" id="useCustomPattern" class="w-4 h-4">
+              <span>Use custom pattern for this campaign</span>
+            </label>
+            <div id="customPatternInputs" class="hidden">
+              <input type="text" id="customPatternInput" placeholder="e.g., 0,5,10,15" 
+                class="w-full border rounded p-2 text-sm sm:text-base">
+              <p class="text-xs text-gray-500 mt-1">Enter days separated by commas (e.g., 0,3,7,14)</p>
+            </div>
+          </div>
+          <button type="submit" class="sm:col-span-2 lg:col-span-4 bg-sky-900 text-white py-2 rounded text-sm sm:text-base">
             Add Campaign
           </button>
         </form>
       </div>
 
-      <!-- Today's Due Emails - Fully Responsive -->
+      <!-- Today's Due Emails -->
       <div class="mb-4 sm:mb-6">
         <h3 class="text-sm sm:text-base font-bold mb-3 text-amber-600">📧 Today's Due Emails</h3>
         <div id="todayDueList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"></div>
       </div>
 
-      <!-- All Gmail Campaigns - Fully Responsive -->
+      <!-- All Gmail Campaigns -->
       <div>
         <h3 class="text-sm sm:text-base font-bold mb-3">All Gmail Campaigns</h3>
         <div id="gmailAccountsList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4"></div>
@@ -96,7 +114,26 @@
     </div>
   </section>
 
-  <!-- Add Gmail Popup - Fully Responsive -->
+  <!-- Pattern Settings Popup -->
+  <div id="patternSettingsPopup" class="fixed inset-0 hidden bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-md mx-3 p-4 sm:p-6">
+      <h2 class="text-base sm:text-lg font-bold mb-3 sm:mb-4">Cold Email Pattern Settings</h2>
+      <form id="patternSettingsForm" class="space-y-3 sm:space-y-4">
+        <div>
+          <label class="block mb-2 text-xs sm:text-sm font-medium text-gray-700">Email Pattern (Days)</label>
+          <input type="text" id="patternInput" placeholder="e.g., 0,3,9,12" 
+            class="w-full border rounded p-2 text-sm sm:text-base" required>
+          <p class="text-xs text-gray-500 mt-1">Enter days separated by commas. Example: 0,3,9,12 means email on Day 0, then Day 3, then Day 9, then Day 12</p>
+        </div>
+        <div class="flex flex-col sm:flex-row justify-end gap-2">
+          <button type="button" id="cancelPatternSettings" class="w-full sm:w-auto px-4 py-2 bg-gray-500 text-white rounded text-sm sm:text-base order-2 sm:order-1">Cancel</button>
+          <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-sky-900 text-white rounded text-sm sm:text-base order-1 sm:order-2">Save Pattern</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Gmail Popup -->
   <div id="addGmailPopup" class="fixed inset-0 hidden bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
     <div class="bg-white rounded-xl shadow-lg w-full max-w-md mx-3 p-4 sm:p-6">
       <h2 class="text-base sm:text-lg font-bold mb-3 sm:mb-4">Add Gmail Account</h2>
@@ -114,7 +151,7 @@
     </div>
   </div>
 
-  <!-- Confirmation Popup - Fully Responsive -->
+  <!-- Confirmation Popup -->
   <div id="confirmPopup" class="fixed inset-0 hidden bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
     <div class="bg-white rounded-xl shadow-lg w-full max-w-md mx-3 p-4 sm:p-6 text-center">
       <h2 id="confirmMessage" class="text-base sm:text-lg font-bold mb-4 sm:mb-6">Are you sure?</h2>
@@ -125,7 +162,7 @@
     </div>
   </div>
 
-  <!-- Loader Popup - Fully Responsive -->
+  <!-- Loader Popup -->
   <div id="loaderPopup" class="fixed inset-0 hidden bg-black bg-opacity-40 flex items-center justify-center z-50 p-3">
     <div class="bg-white rounded-xl p-4 sm:p-6 shadow text-center">
       <div class="loader border-t-4 border-b-4 border-sky-900 w-10 h-10 sm:w-12 sm:h-12 rounded-full animate-spin mx-auto"></div>

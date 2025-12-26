@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { 
-  getFirestore, collection, getDocs, query, orderBy, updateDoc, doc, deleteDoc, addDoc, serverTimestamp 
+  getFirestore, collection, getDocs, query, orderBy, updateDoc, doc, deleteDoc, addDoc, serverTimestamp, setDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 // Firebase Config
@@ -68,6 +68,7 @@ function showAdminSection() {
   loadGmailList();
   loadGmailAccounts();
   loadTodayDue();
+  checkPatternSettings();
 }
 
 // Tabs
@@ -115,6 +116,112 @@ function showConfirm(message, callback) {
 
   btnCancel.onclick = () => { close(); };
   btnOk.onclick = async () => { close(); await callback(); };
+}
+
+// ============== PATTERN SETTINGS ==============
+
+async function checkPatternSettings() {
+  try {
+    const docRef = doc(db, "settings", "emailPattern");
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      showAlert("⚠️ Please set your cold email pattern first!");
+      document.getElementById("patternSettingsPopup").classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("Error checking pattern:", err);
+  }
+}
+
+async function getEmailPattern() {
+  try {
+    const docRef = doc(db, "settings", "emailPattern");
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      return docSnap.data().pattern || [0, 3, 9, 12];
+    }
+    return null;
+  } catch (err) {
+    console.error("Error getting pattern:", err);
+    return null;
+  }
+}
+
+// Pattern Settings Popup
+const patternSettingsBtn = document.getElementById("patternSettingsBtn");
+const patternSettingsPopup = document.getElementById("patternSettingsPopup");
+const cancelPatternSettings = document.getElementById("cancelPatternSettings");
+const patternSettingsForm = document.getElementById("patternSettingsForm");
+
+if (patternSettingsBtn) {
+  patternSettingsBtn.addEventListener("click", async () => {
+    const pattern = await getEmailPattern();
+    if (pattern) {
+      document.getElementById("patternInput").value = pattern.join(",");
+    }
+    patternSettingsPopup.classList.remove("hidden");
+  });
+}
+
+if (cancelPatternSettings) {
+  cancelPatternSettings.addEventListener("click", () => {
+    patternSettingsPopup.classList.add("hidden");
+  });
+}
+
+if (patternSettingsForm) {
+  patternSettingsForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    
+    const patternInput = document.getElementById("patternInput").value.trim();
+    
+    if (!patternInput) {
+      showAlert("Please enter a pattern!");
+      return;
+    }
+    
+    // Parse pattern
+    const patternArray = patternInput.split(",").map(day => parseInt(day.trim())).filter(day => !isNaN(day));
+    
+    if (patternArray.length === 0) {
+      showAlert("Invalid pattern! Use format like: 0,3,9,12");
+      return;
+    }
+    
+    showLoader();
+    
+    try {
+      const docRef = doc(db, "settings", "emailPattern");
+      await setDoc(docRef, {
+        pattern: patternArray,
+        updatedAt: serverTimestamp()
+      });
+      
+      patternSettingsPopup.classList.add("hidden");
+      hideLoader();
+      showAlert(`✅ Pattern saved: ${patternArray.join(", ")} days`);
+    } catch (err) {
+      console.error(err);
+      hideLoader();
+      showAlert("Failed to save pattern");
+    }
+  });
+}
+
+// Custom Pattern Toggle
+const useCustomPattern = document.getElementById("useCustomPattern");
+const customPatternInputs = document.getElementById("customPatternInputs");
+
+if (useCustomPattern) {
+  useCustomPattern.addEventListener("change", () => {
+    if (useCustomPattern.checked) {
+      customPatternInputs.classList.remove("hidden");
+    } else {
+      customPatternInputs.classList.add("hidden");
+    }
+  });
 }
 
 // ============== GMAIL LIST MANAGEMENT ==============
@@ -214,12 +321,11 @@ function isOverdue(date) {
   return checkDate < today;
 }
 
-function calculateNextDueDate(lastSentDate, currentStage) {
-  const dayIntervals = [0, 3, 9, 12];
-  if (currentStage >= 4) return null;
+function calculateNextDueDate(lastSentDate, currentStage, pattern) {
+  if (currentStage >= pattern.length) return null;
   
   const lastDate = new Date(lastSentDate);
-  const nextInterval = dayIntervals[currentStage];
+  const nextInterval = pattern[currentStage];
   const nextDate = new Date(lastDate);
   nextDate.setDate(lastDate.getDate() + nextInterval);
   
@@ -235,10 +341,33 @@ if (addGmailForm) {
     const gmailName = document.getElementById("gmailName").value.trim();
     const startEmail = document.getElementById("startEmail").value.trim();
     const endEmail = document.getElementById("endEmail").value.trim();
+    const campaignLabel = document.getElementById("campaignLabel").value.trim();
+    const useCustom = document.getElementById("useCustomPattern").checked;
     
     if (!gmailName || !startEmail || !endEmail) {
-      showAlert("Please fill all fields");
+      showAlert("Please fill all required fields");
       return;
+    }
+    
+    // Get pattern
+    let pattern;
+    if (useCustom) {
+      const customPatternInput = document.getElementById("customPatternInput").value.trim();
+      if (!customPatternInput) {
+        showAlert("Please enter custom pattern or uncheck the option");
+        return;
+      }
+      pattern = customPatternInput.split(",").map(day => parseInt(day.trim())).filter(day => !isNaN(day));
+      if (pattern.length === 0) {
+        showAlert("Invalid custom pattern! Use format like: 0,5,10,15");
+        return;
+      }
+    } else {
+      pattern = await getEmailPattern();
+      if (!pattern) {
+        showAlert("⚠️ Please set default email pattern first in Pattern Settings!");
+        return;
+      }
     }
     
     showLoader();
@@ -248,12 +377,15 @@ if (addGmailForm) {
         gmailName,
         startEmail,
         endEmail,
+        label: campaignLabel || "",
+        pattern: pattern,
         currentStage: 0,
         lastSentDate: new Date().toISOString(),
         createdAt: serverTimestamp()
       });
       
       addGmailForm.reset();
+      document.getElementById("customPatternInputs").classList.add("hidden");
       await loadGmailAccounts();
       await loadTodayDue();
       hideLoader();
@@ -289,14 +421,14 @@ async function loadGmailAccounts() {
       const data = docSnap.data();
       const id = docSnap.id;
       
-      const nextDueDate = calculateNextDueDate(data.lastSentDate, data.currentStage);
-      const isComplete = data.currentStage >= 4;
+      const pattern = data.pattern || [0, 3, 9, 12];
+      const nextDueDate = calculateNextDueDate(data.lastSentDate, data.currentStage, pattern);
+      const isComplete = data.currentStage >= pattern.length;
       const isDueToday = nextDueDate && isToday(nextDueDate);
       const isPastDue = nextDueDate && isOverdue(nextDueDate);
       
-      const stageText = isComplete ? "✅ Completed" : `Email ${data.currentStage + 1}/4`;
-      const dayIntervals = [0, 3, 9, 12];
-      const nextDay = isComplete ? "-" : `Day ${dayIntervals[data.currentStage]}`;
+      const stageText = isComplete ? "✅ Completed" : `Email ${data.currentStage + 1}/${pattern.length}`;
+      const nextDay = isComplete ? "-" : `Day ${pattern[data.currentStage]}`;
       
       let statusBadge = "";
       if (isComplete) {
@@ -309,9 +441,12 @@ async function loadGmailAccounts() {
         statusBadge = '<span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">Active</span>';
       }
       
+      const labelHTML = data.label ? `<div class="mb-2"><span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-semibold">${data.label}</span></div>` : '';
+      
       const card = document.createElement("div");
       card.className = `bg-white shadow rounded-xl p-3 sm:p-4 border-2 ${isDueToday ? 'border-amber-400' : isPastDue ? 'border-red-400' : isComplete ? 'border-green-400' : 'border-transparent'}`;
       card.innerHTML = `
+        ${labelHTML}
         <div class="flex flex-col sm:flex-row items-start justify-between mb-3 gap-2">
           <h4 class="text-base sm:text-lg font-bold text-sky-900 break-words">${data.gmailName}</h4>
           ${statusBadge}
@@ -321,6 +456,7 @@ async function loadGmailAccounts() {
           <div><span class="font-semibold">Start:</span> ${data.startEmail}</div>
           <div><span class="font-semibold">End:</span> ${data.endEmail}</div>
           <div><span class="font-semibold">Progress:</span> ${stageText}</div>
+          <div><span class="font-semibold">Pattern:</span> ${pattern.join(", ")} days</div>
           <div><span class="font-semibold">Last Sent:</span> ${formatDate(data.lastSentDate)}</div>
           <div><span class="font-semibold">Next Due:</span> ${nextDueDate ? formatDate(nextDueDate) : "N/A"} ${!isComplete ? `(${nextDay})` : ''}</div>
         </div>
@@ -362,28 +498,33 @@ async function loadTodayDue() {
       const data = docSnap.data();
       const id = docSnap.id;
       
-      const nextDueDate = calculateNextDueDate(data.lastSentDate, data.currentStage);
-      const isComplete = data.currentStage >= 4;
+      const pattern = data.pattern || [0, 3, 9, 12];
+      const nextDueDate = calculateNextDueDate(data.lastSentDate, data.currentStage, pattern);
+      const isComplete = data.currentStage >= pattern.length;
       
       if (!isComplete && nextDueDate && (isToday(nextDueDate) || isOverdue(nextDueDate))) {
         hasDueToday = true;
         
-        const dayIntervals = [0, 3, 9, 12];
-        const nextDay = `Day ${dayIntervals[data.currentStage]}`;
+        const nextDay = `Day ${pattern[data.currentStage]}`;
         const isPastDue = isOverdue(nextDueDate);
+        
+        const labelHTML = data.label ? `<span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-semibold mr-2">${data.label}</span>` : '';
         
         const card = document.createElement("div");
         card.className = `bg-white shadow rounded-xl p-3 sm:p-4 border-2 ${isPastDue ? 'border-red-400' : 'border-amber-400'}`;
         card.innerHTML = `
           <div class="flex flex-col sm:flex-row items-start justify-between mb-2 gap-2">
-            <h4 class="text-base sm:text-lg font-bold text-sky-900 break-words">${data.gmailName}</h4>
+            <div class="flex flex-wrap items-center gap-2">
+              ${labelHTML}
+              <h4 class="text-base sm:text-lg font-bold text-sky-900 break-words">${data.gmailName}</h4>
+            </div>
             <span class="px-2 py-1 ${isPastDue ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'} rounded-full text-xs font-semibold whitespace-nowrap">
               ${isPastDue ? 'Overdue' : 'Due Today'}
             </span>
           </div>
           
           <div class="space-y-1 text-xs sm:text-sm text-slate-700 mb-3 break-words">
-            <div><span class="font-semibold">Email:</span> ${data.currentStage + 1}/4 (${nextDay})</div>
+            <div><span class="font-semibold">Email:</span> ${data.currentStage + 1}/${pattern.length} (${nextDay})</div>
             <div><span class="font-semibold">Range:</span> ${data.startEmail} → ${data.endEmail}</div>
             <div><span class="font-semibold">Due Date:</span> ${formatDate(nextDueDate)}</div>
           </div>
@@ -424,6 +565,7 @@ window.markAsSent = async function(id) {
       return;
     }
     
+    const pattern = currentData.pattern || [0, 3, 9, 12];
     const newStage = currentData.currentStage + 1;
     
     await updateDoc(docRef, {
@@ -431,11 +573,10 @@ window.markAsSent = async function(id) {
       lastSentDate: new Date().toISOString()
     });
     
-    if (newStage >= 4) {
+    if (newStage >= pattern.length) {
       showAlert("🎉 All emails completed for this campaign!");
     } else {
-      const dayIntervals = [0, 3, 9, 12];
-      showAlert(`✅ Marked as sent! Next email in ${dayIntervals[newStage]} days.`);
+      showAlert(`✅ Marked as sent! Next email in ${pattern[newStage]} days.`);
     }
     
     await loadGmailAccounts();
@@ -456,6 +597,8 @@ function createEditGmailPopup(data, id) {
   const popup = document.createElement("div");
   popup.className = "bg-white w-full max-w-lg rounded-xl shadow-lg p-4 sm:p-6 overflow-y-auto max-h-[90vh]";
 
+  const pattern = data.pattern || [0, 3, 9, 12];
+
   popup.innerHTML = `
     <h2 class="text-base sm:text-lg font-bold mb-3 sm:mb-4">Edit Campaign</h2>
     <form id="editGmailForm" class="space-y-3 sm:space-y-4">
@@ -470,6 +613,15 @@ function createEditGmailPopup(data, id) {
       <div>
         <label class="block mb-2 text-xs sm:text-sm font-medium text-gray-700">End Email Address</label>
         <input type="email" id="edit-endEmail" value="${data.endEmail || ""}" class="w-full border rounded p-2 text-sm sm:text-base" required />
+      </div>
+      <div>
+        <label class="block mb-2 text-xs sm:text-sm font-medium text-gray-700">Label (Optional)</label>
+        <input type="text" id="edit-label" value="${data.label || ""}" class="w-full border rounded p-2 text-sm sm:text-base" />
+      </div>
+      <div>
+        <label class="block mb-2 text-xs sm:text-sm font-medium text-gray-700">Email Pattern (Days)</label>
+        <input type="text" id="edit-pattern" value="${pattern.join(",")}" class="w-full border rounded p-2 text-sm sm:text-base" required />
+        <p class="text-xs text-gray-500 mt-1">Days separated by commas (e.g., 0,3,9,12)</p>
       </div>
       <div class="flex flex-col sm:flex-row justify-end gap-2 mt-4">
         <button type="button" id="cancelEditGmail" class="w-full sm:w-auto px-4 py-2 bg-gray-500 text-white rounded text-sm sm:text-base order-2 sm:order-1">Cancel</button>
@@ -486,10 +638,21 @@ function createEditGmailPopup(data, id) {
     e.preventDefault();
     showLoader();
     
+    const patternInput = document.getElementById("edit-pattern").value.trim();
+    const newPattern = patternInput.split(",").map(day => parseInt(day.trim())).filter(day => !isNaN(day));
+    
+    if (newPattern.length === 0) {
+      hideLoader();
+      showAlert("Invalid pattern! Use format like: 0,3,9,12");
+      return;
+    }
+    
     const updatedData = {
       gmailName: document.getElementById("edit-gmailName").value.trim(),
       startEmail: document.getElementById("edit-startEmail").value.trim(),
-      endEmail: document.getElementById("edit-endEmail").value.trim()
+      endEmail: document.getElementById("edit-endEmail").value.trim(),
+      label: document.getElementById("edit-label").value.trim(),
+      pattern: newPattern
     };
     
     await updateDoc(doc(db, "gmailAccounts", id), updatedData);
