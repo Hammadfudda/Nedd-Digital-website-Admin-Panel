@@ -13,9 +13,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { 
   getFirestore, collection, getDocs, query, orderBy, updateDoc, doc, deleteDoc, addDoc, serverTimestamp, setDoc, getDoc, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { 
-  getMessaging, getToken, onMessage 
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
 
 // Firebase Config
 const firebaseConfig = {
@@ -30,149 +27,15 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const messaging = getMessaging(app);
-
 const PASS = "03172052765";
 
-// VAPID Key from Firebase Console
-const VAPID_KEY = "BJuAicaUwhSgLF_rWxbcc8Ed7nCQXaO8vZoLBqDZXQmXcB6STUP4uQmAfH8_1A30ewK_HKbcz4A7util7TLBi5s";
-
 // ============== NOTIFICATION SETUP ==============
-let notificationPermissionGranted = false;
 let listenersInitialized = false;
 
 // FIXED: Initialize counters as null instead of 0
 let lastTestimonialCount = null;
 let lastContactCount = null;
 let lastDueEmailCount = null;
-
-async function requestNotificationPermission() {
-  try {
-    if (!("Notification" in window)) {
-      console.log("❌ Browser doesn't support notifications");
-      return false;
-    }
-
-    const permission = await Notification.requestPermission();
-    
-    if (permission === 'granted') {
-      console.log('✅ Notification permission granted');
-      notificationPermissionGranted = true;
-      
-      // Get FCM token
-      try {
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-        if (token) {
-          console.log('✅ FCM Token received:', token);
-          // Save token to Firestore
-          await saveFCMToken(token);
-          showAlert('✅ Notifications enabled successfully!');
-          
-          // FIXED: Setup listeners immediately after permission granted
-          if (!listenersInitialized) {
-            setupAllListeners();
-          }
-          
-          return true;
-        } else {
-          console.log('❌ No FCM token received');
-          return false;
-        }
-      } catch (tokenError) {
-        console.error('❌ Error getting FCM token:', tokenError);
-        showAlert('⚠️ Notification setup failed. Please try again.');
-        return false;
-      }
-    } else {
-      console.log('❌ Notification permission denied');
-      showAlert('⚠️ Notifications disabled');
-      return false;
-    }
-  } catch (error) {
-    console.error('❌ Error requesting notification permission:', error);
-    return false;
-  }
-}
-
-async function saveFCMToken(token) {
-  try {
-    await setDoc(doc(db, "fcmTokens", "adminToken"), {
-      token: token,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-    console.log('✅ FCM token saved to Firestore');
-  } catch (error) {
-    console.error('❌ Error saving FCM token:', error);
-  }
-}
-
-// Listen for foreground messages
-onMessage(messaging, (payload) => {
-  console.log('📬 Foreground message received:', payload);
-  
-  const title = payload.notification?.title || payload.data?.title || 'Nedd Digital';
-  const body = payload.notification?.body || payload.data?.body || 'New notification';
-  
-  // Show browser notification if permission granted
-  if (Notification.permission === 'granted') {
-    new Notification(title, {
-      body: body,
-      icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-      badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-      requireInteraction: true,
-      tag: 'nedd-admin-notification'
-    });
-  }
-  
-  // FIXED: Play notification sound
-  playNotificationSound();
-});
-
-// FIXED: Add notification sound function
-function playNotificationSound() {
-  try {
-    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS57OigUhMJTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBQ==');
-    audio.volume = 0.3;
-    audio.play().catch(e => console.log('Audio play failed:', e));
-  } catch (e) {
-    console.log('Could not play notification sound:', e);
-  }
-}
-
-// Show notification popup on first visit
-function showNotificationPopup() {
-  const notificationShown = localStorage.getItem('notificationPopupShown');
-  
-  if (!notificationShown && Notification.permission === 'default') {
-    setTimeout(() => {
-      showAlert('🔔 Enable notifications to get instant alerts for new testimonials, contacts, and email reminders!');
-      requestNotificationPermission();
-      localStorage.setItem('notificationPopupShown', 'true');
-    }, 2000);
-  }
-}
-
-// Notification popup buttons
-document.addEventListener('DOMContentLoaded', () => {
-  const notificationAllow = document.getElementById('notificationAllow');
-  const notificationDeny = document.getElementById('notificationDeny');
-  const notificationPopup = document.getElementById('notificationPopup');
-
-  if (notificationAllow) {
-    notificationAllow.addEventListener('click', async () => {
-      if (notificationPopup) notificationPopup.classList.add('hidden');
-      localStorage.setItem('notificationPopupShown', 'true');
-      await requestNotificationPermission();
-    });
-  }
-
-  if (notificationDeny) {
-    notificationDeny.addEventListener('click', () => {
-      if (notificationPopup) notificationPopup.classList.add('hidden');
-      localStorage.setItem('notificationPopupShown', 'true');
-    });
-  }
-});
 
 // FIXED: Add function to setup all listeners
 function setupAllListeners() {
@@ -203,20 +66,7 @@ function setupTestimonialListener() {
     if (currentCount > lastTestimonialCount) {
       const newDocs = currentCount - lastTestimonialCount;
       console.log(`📬 ${newDocs} new testimonial(s) detected`);
-      
-      // Show browser notification
-      if (Notification.permission === 'granted') {
-        new Notification('📝 New Testimonial!', {
-          body: `${newDocs} new testimonial(s) received`,
-          icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-          badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-          tag: 'testimonial',
-          requireInteraction: true
-        });
-        playNotificationSound();
-      }
-      
-      // FIXED: Refresh the testimonials list
+      // Refresh the testimonials list (UI only)
       loadPending();
     }
     
@@ -242,20 +92,7 @@ function setupContactListener() {
     if (currentCount > lastContactCount) {
       const newDocs = currentCount - lastContactCount;
       console.log(`📬 ${newDocs} new contact(s) detected`);
-      
-      // Show browser notification
-      if (Notification.permission === 'granted') {
-        new Notification('📧 New Contact!', {
-          body: `${newDocs} new contact inquiry received`,
-          icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-          badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-          tag: 'contact',
-          requireInteraction: true
-        });
-        playNotificationSound();
-      }
-      
-      // FIXED: Refresh the contacts list
+      // Refresh the contacts list (UI only)
       loadContacts();
     }
     
@@ -300,20 +137,7 @@ async function checkDueEmails() {
     if (dueCount > lastDueEmailCount) {
       const newDue = dueCount - lastDueEmailCount;
       console.log(`📬 ${newDue} new email(s) due`);
-      
-      // Show browser notification
-      if (Notification.permission === 'granted') {
-        new Notification('⏰ Email Reminder!', {
-          body: `${newDue} email(s) are due today: ${dueEmails.slice(-newDue).join(', ')}`,
-          icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-          badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
-          tag: 'email-reminder',
-          requireInteraction: true
-        });
-        playNotificationSound();
-      }
-      
-      // FIXED: Refresh the due emails list
+      // Refresh the due emails list (UI only)
       loadTodayDue();
     }
     
@@ -419,21 +243,8 @@ function showAdminSection() {
   loadTodayDue();
   checkPatternSettings();
   
-  // FIXED: Setup notifications based on current permission
-  if (Notification.permission === 'granted') {
-    notificationPermissionGranted = true;
-    // Setup listeners immediately
-    setupAllListeners();
-    // Refresh token
-    requestNotificationPermission();
-  } else if (Notification.permission === 'default') {
-    // Show popup to request permission
-    showNotificationPopup();
-  } else {
-    // Permission denied - setup listeners anyway for UI updates
-    setupAllListeners();
-    console.log('⚠️ Notifications denied - UI will still update');
-  }
+  // Initialize real-time listeners (no push notifications)
+  setupAllListeners();
 }
 
 // ============== TABS ==============
