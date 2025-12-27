@@ -1,7 +1,21 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker
+      .register("./firebase-messaging-sw.js", { scope: "./" })
+      .then(reg => {
+        console.log("✅ Service worker registered (PWA + Notifications)");
+      })
+      .catch(err => console.log("❌ Service worker registration failed:", err));
+  });
+}
+// ============== FIREBASE SETUP ==============
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
-  getFirestore, collection, getDocs, query, orderBy, updateDoc, doc, deleteDoc, addDoc, serverTimestamp, setDoc, getDoc
-} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+  getFirestore, collection, getDocs, query, orderBy, updateDoc, doc, deleteDoc, addDoc, serverTimestamp, setDoc, getDoc, onSnapshot
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { 
+  getMessaging, getToken, onMessage 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
 
 // Firebase Config
 const firebaseConfig = {
@@ -16,14 +30,310 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const messaging = getMessaging(app);
 
 const PASS = "03172052765";
 
-// Loader
-function showLoader() { document.getElementById("loaderPopup").classList.remove("hidden"); }
-function hideLoader() { document.getElementById("loaderPopup").classList.add("hidden"); }
+// VAPID Key from Firebase Console
+const VAPID_KEY = "BJuAicaUwhSgLF_rWxbcc8Ed7nCQXaO8vZoLBqDZXQmXcB6STUP4uQmAfH8_1A30ewK_HKbcz4A7util7TLBi5s";
 
-// Alert Popup
+// ============== NOTIFICATION SETUP ==============
+let notificationPermissionGranted = false;
+let listenersInitialized = false;
+
+// FIXED: Initialize counters as null instead of 0
+let lastTestimonialCount = null;
+let lastContactCount = null;
+let lastDueEmailCount = null;
+
+async function requestNotificationPermission() {
+  try {
+    if (!("Notification" in window)) {
+      console.log("❌ Browser doesn't support notifications");
+      return false;
+    }
+
+    const permission = await Notification.requestPermission();
+    
+    if (permission === 'granted') {
+      console.log('✅ Notification permission granted');
+      notificationPermissionGranted = true;
+      
+      // Get FCM token
+      try {
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token) {
+          console.log('✅ FCM Token received:', token);
+          // Save token to Firestore
+          await saveFCMToken(token);
+          showAlert('✅ Notifications enabled successfully!');
+          
+          // FIXED: Setup listeners immediately after permission granted
+          if (!listenersInitialized) {
+            setupAllListeners();
+          }
+          
+          return true;
+        } else {
+          console.log('❌ No FCM token received');
+          return false;
+        }
+      } catch (tokenError) {
+        console.error('❌ Error getting FCM token:', tokenError);
+        showAlert('⚠️ Notification setup failed. Please try again.');
+        return false;
+      }
+    } else {
+      console.log('❌ Notification permission denied');
+      showAlert('⚠️ Notifications disabled');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error requesting notification permission:', error);
+    return false;
+  }
+}
+
+async function saveFCMToken(token) {
+  try {
+    await setDoc(doc(db, "fcmTokens", "adminToken"), {
+      token: token,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+    console.log('✅ FCM token saved to Firestore');
+  } catch (error) {
+    console.error('❌ Error saving FCM token:', error);
+  }
+}
+
+// Listen for foreground messages
+onMessage(messaging, (payload) => {
+  console.log('📬 Foreground message received:', payload);
+  
+  const title = payload.notification?.title || payload.data?.title || 'Nedd Digital';
+  const body = payload.notification?.body || payload.data?.body || 'New notification';
+  
+  // Show browser notification if permission granted
+  if (Notification.permission === 'granted') {
+    new Notification(title, {
+      body: body,
+      icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+      badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+      requireInteraction: true,
+      tag: 'nedd-admin-notification'
+    });
+  }
+  
+  // FIXED: Play notification sound
+  playNotificationSound();
+});
+
+// FIXED: Add notification sound function
+function playNotificationSound() {
+  try {
+    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIGGS57OigUhMJTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBSh+zPLaizsKFGO56+mnVBMKTKXh8bllHAU2jdXyzn0vBQ==');
+    audio.volume = 0.3;
+    audio.play().catch(e => console.log('Audio play failed:', e));
+  } catch (e) {
+    console.log('Could not play notification sound:', e);
+  }
+}
+
+// Show notification popup on first visit
+function showNotificationPopup() {
+  const notificationShown = localStorage.getItem('notificationPopupShown');
+  
+  if (!notificationShown && Notification.permission === 'default') {
+    setTimeout(() => {
+      showAlert('🔔 Enable notifications to get instant alerts for new testimonials, contacts, and email reminders!');
+      requestNotificationPermission();
+      localStorage.setItem('notificationPopupShown', 'true');
+    }, 2000);
+  }
+}
+
+// Notification popup buttons
+document.addEventListener('DOMContentLoaded', () => {
+  const notificationAllow = document.getElementById('notificationAllow');
+  const notificationDeny = document.getElementById('notificationDeny');
+  const notificationPopup = document.getElementById('notificationPopup');
+
+  if (notificationAllow) {
+    notificationAllow.addEventListener('click', async () => {
+      if (notificationPopup) notificationPopup.classList.add('hidden');
+      localStorage.setItem('notificationPopupShown', 'true');
+      await requestNotificationPermission();
+    });
+  }
+
+  if (notificationDeny) {
+    notificationDeny.addEventListener('click', () => {
+      if (notificationPopup) notificationPopup.classList.add('hidden');
+      localStorage.setItem('notificationPopupShown', 'true');
+    });
+  }
+});
+
+// FIXED: Add function to setup all listeners
+function setupAllListeners() {
+  if (listenersInitialized) return;
+  
+  console.log('🔧 Setting up real-time listeners...');
+  setupTestimonialListener();
+  setupContactListener();
+  setupEmailReminderChecker();
+  listenersInitialized = true;
+  console.log('✅ All listeners initialized');
+}
+
+// ============== REAL-TIME LISTENERS FOR NOTIFICATIONS ==============
+function setupTestimonialListener() {
+  const q = query(collection(db, "testimonials"), orderBy("timestamp", "desc"));
+  
+  onSnapshot(q, (snapshot) => {
+    const currentCount = snapshot.size;
+    
+    // FIXED: Initialize on first load
+    if (lastTestimonialCount === null) {
+      lastTestimonialCount = currentCount;
+      console.log(`📊 Initial testimonial count: ${currentCount}`);
+      return;
+    }
+    
+    if (currentCount > lastTestimonialCount) {
+      const newDocs = currentCount - lastTestimonialCount;
+      console.log(`📬 ${newDocs} new testimonial(s) detected`);
+      
+      // Show browser notification
+      if (Notification.permission === 'granted') {
+        new Notification('📝 New Testimonial!', {
+          body: `${newDocs} new testimonial(s) received`,
+          icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+          badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+          tag: 'testimonial',
+          requireInteraction: true
+        });
+        playNotificationSound();
+      }
+      
+      // FIXED: Refresh the testimonials list
+      loadPending();
+    }
+    
+    lastTestimonialCount = currentCount;
+  }, (error) => {
+    console.error('❌ Testimonial listener error:', error);
+  });
+}
+
+function setupContactListener() {
+  const q = query(collection(db, "contacts"), orderBy("timestamp", "desc"));
+  
+  onSnapshot(q, (snapshot) => {
+    const currentCount = snapshot.size;
+    
+    // FIXED: Initialize on first load
+    if (lastContactCount === null) {
+      lastContactCount = currentCount;
+      console.log(`📊 Initial contact count: ${currentCount}`);
+      return;
+    }
+    
+    if (currentCount > lastContactCount) {
+      const newDocs = currentCount - lastContactCount;
+      console.log(`📬 ${newDocs} new contact(s) detected`);
+      
+      // Show browser notification
+      if (Notification.permission === 'granted') {
+        new Notification('📧 New Contact!', {
+          body: `${newDocs} new contact inquiry received`,
+          icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+          badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+          tag: 'contact',
+          requireInteraction: true
+        });
+        playNotificationSound();
+      }
+      
+      // FIXED: Refresh the contacts list
+      loadContacts();
+    }
+    
+    lastContactCount = currentCount;
+  }, (error) => {
+    console.error('❌ Contact listener error:', error);
+  });
+}
+
+function setupEmailReminderChecker() {
+  checkDueEmails();
+  setInterval(checkDueEmails, 60000); // Check every minute
+}
+
+async function checkDueEmails() {
+  try {
+    const q = query(collection(db, "gmailAccounts"));
+    const snapshot = await getDocs(q);
+    
+    let dueCount = 0;
+    let dueEmails = [];
+    
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const pattern = data.pattern || [0, 3, 9, 12];
+      const nextDueDate = calculateNextDueDate(data.lastSentDate, data.currentStage, pattern);
+      const isComplete = data.currentStage >= pattern.length;
+      
+      if (!isComplete && nextDueDate && (isToday(nextDueDate) || isOverdue(nextDueDate))) {
+        dueCount++;
+        dueEmails.push(data.gmailName);
+      }
+    });
+    
+    // FIXED: Initialize on first load
+    if (lastDueEmailCount === null) {
+      lastDueEmailCount = dueCount;
+      console.log(`📊 Initial due email count: ${dueCount}`);
+      return;
+    }
+    
+    if (dueCount > lastDueEmailCount) {
+      const newDue = dueCount - lastDueEmailCount;
+      console.log(`📬 ${newDue} new email(s) due`);
+      
+      // Show browser notification
+      if (Notification.permission === 'granted') {
+        new Notification('⏰ Email Reminder!', {
+          body: `${newDue} email(s) are due today: ${dueEmails.slice(-newDue).join(', ')}`,
+          icon: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+          badge: 'https://nedddigital.netlify.app/images/nedddigitallogo.png',
+          tag: 'email-reminder',
+          requireInteraction: true
+        });
+        playNotificationSound();
+      }
+      
+      // FIXED: Refresh the due emails list
+      loadTodayDue();
+    }
+    
+    lastDueEmailCount = dueCount;
+  } catch (error) {
+    console.error('❌ Error checking due emails:', error);
+  }
+}
+
+// ============== HELPER FUNCTIONS ==============
+function showLoader() { 
+  const loader = document.getElementById("loaderPopup");
+  if (loader) loader.classList.remove("hidden");
+}
+
+function hideLoader() { 
+  const loader = document.getElementById("loaderPopup");
+  if (loader) loader.classList.add("hidden");
+}
+
 function showAlert(message) {
   const overlay = document.createElement("div");
   overlay.className = "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4";
@@ -40,266 +350,6 @@ function showAlert(message) {
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
 }
-
-// Login
-const loginBtn = document.getElementById("loginBtn");
-loginBtn.addEventListener("click", loginHandler);
-
-function loginHandler() {
-  const pass = document.getElementById("adminPass").value;
-  if (pass === PASS) {
-    localStorage.setItem("adminLoggedIn", "true");
-    showAdminSection();
-  } else {
-    document.getElementById("errorMsg").classList.remove("hidden");
-  }
-}
-
-if (localStorage.getItem("adminLoggedIn") === "true") {
-  showAdminSection();
-}
-
-function showAdminSection() {
-  document.getElementById("passwordSection").classList.add("hidden");
-  document.getElementById("adminSection").classList.remove("hidden");
-  document.getElementById("logoutBtn").classList.remove("hidden");
-  loadPending();
-  loadContacts();
-  loadGmailList();
-  loadGmailAccounts();
-  loadTodayDue();
-  checkPatternSettings();
-}
-
-// Tabs
-const tabTestimonials = document.getElementById("tabTestimonials");
-const tabContacts = document.getElementById("tabContacts");
-const tabEmailTracking = document.getElementById("tabEmailTracking");
-
-const testimonialSection = document.getElementById("testimonialSection");
-const contactSection = document.getElementById("contactSection");
-const emailTrackingSection = document.getElementById("emailTrackingSection");
-
-const tabs = [tabTestimonials, tabContacts, tabEmailTracking];
-const sections = [testimonialSection, contactSection, emailTrackingSection];
-
-function activateTab(activeTab) {
-  tabs.forEach((tab, i) => {
-    if (tab === activeTab) {
-      tab.classList.add("bg-sky-900", "text-white");
-      tab.classList.remove("bg-gray-300", "text-black");
-      sections[i].classList.remove("hidden");
-    } else {
-      tab.classList.remove("bg-sky-900", "text-white");
-      tab.classList.add("bg-gray-300", "text-black");
-      sections[i].classList.add("hidden");
-    }
-  });
-}
-
-tabTestimonials.addEventListener("click", () => activateTab(tabTestimonials));
-tabContacts.addEventListener("click", () => activateTab(tabContacts));
-tabEmailTracking.addEventListener("click", () => activateTab(tabEmailTracking));
-activateTab(tabTestimonials);
-
-// Confirmation Popup
-function showConfirm(message, callback) {
-  const popup = document.getElementById("confirmPopup");
-  const msg = document.getElementById("confirmMessage");
-  const btnCancel = document.getElementById("confirmCancel");
-  const btnOk = document.getElementById("confirmOk");
-
-  msg.textContent = message;
-  popup.classList.remove("hidden");
-
-  const close = () => popup.classList.add("hidden");
-
-  btnCancel.onclick = () => { close(); };
-  btnOk.onclick = async () => { close(); await callback(); };
-}
-
-// ============== PATTERN SETTINGS ==============
-
-async function checkPatternSettings() {
-  try {
-    const docRef = doc(db, "settings", "emailPattern");
-    const docSnap = await getDoc(docRef);
-    
-    if (!docSnap.exists()) {
-      showAlert("⚠️ Please set your cold email pattern first!");
-      document.getElementById("patternSettingsPopup").classList.remove("hidden");
-    }
-  } catch (err) {
-    console.error("Error checking pattern:", err);
-  }
-}
-
-async function getEmailPattern() {
-  try {
-    const docRef = doc(db, "settings", "emailPattern");
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      return docSnap.data().pattern || [0, 3, 9, 12];
-    }
-    return null;
-  } catch (err) {
-    console.error("Error getting pattern:", err);
-    return null;
-  }
-}
-
-// Pattern Settings Popup
-const patternSettingsBtn = document.getElementById("patternSettingsBtn");
-const patternSettingsPopup = document.getElementById("patternSettingsPopup");
-const cancelPatternSettings = document.getElementById("cancelPatternSettings");
-const patternSettingsForm = document.getElementById("patternSettingsForm");
-
-if (patternSettingsBtn) {
-  patternSettingsBtn.addEventListener("click", async () => {
-    const pattern = await getEmailPattern();
-    if (pattern) {
-      document.getElementById("patternInput").value = pattern.join(",");
-    }
-    patternSettingsPopup.classList.remove("hidden");
-  });
-}
-
-if (cancelPatternSettings) {
-  cancelPatternSettings.addEventListener("click", () => {
-    patternSettingsPopup.classList.add("hidden");
-  });
-}
-
-if (patternSettingsForm) {
-  patternSettingsForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    
-    const patternInput = document.getElementById("patternInput").value.trim();
-    
-    if (!patternInput) {
-      showAlert("Please enter a pattern!");
-      return;
-    }
-    
-    // Parse pattern
-    const patternArray = patternInput.split(",").map(day => parseInt(day.trim())).filter(day => !isNaN(day));
-    
-    if (patternArray.length === 0) {
-      showAlert("Invalid pattern! Use format like: 0,3,9,12");
-      return;
-    }
-    
-    showLoader();
-    
-    try {
-      const docRef = doc(db, "settings", "emailPattern");
-      await setDoc(docRef, {
-        pattern: patternArray,
-        updatedAt: serverTimestamp()
-      });
-      
-      patternSettingsPopup.classList.add("hidden");
-      hideLoader();
-      showAlert(`✅ Pattern saved: ${patternArray.join(", ")} days`);
-    } catch (err) {
-      console.error(err);
-      hideLoader();
-      showAlert("Failed to save pattern");
-    }
-  });
-}
-
-// Custom Pattern Toggle
-const useCustomPattern = document.getElementById("useCustomPattern");
-const customPatternInputs = document.getElementById("customPatternInputs");
-
-if (useCustomPattern) {
-  useCustomPattern.addEventListener("change", () => {
-    if (useCustomPattern.checked) {
-      customPatternInputs.classList.remove("hidden");
-    } else {
-      customPatternInputs.classList.add("hidden");
-    }
-  });
-}
-
-// ============== GMAIL LIST MANAGEMENT ==============
-
-// Load Gmail List for Dropdown
-async function loadGmailList() {
-  const dropdown = document.getElementById("gmailName");
-  if (!dropdown) return;
-  
-  try {
-    const q = query(collection(db, "gmailList"), orderBy("createdAt", "desc"));
-    const snapshot = await getDocs(q);
-    
-    dropdown.innerHTML = '<option value="">Select Gmail Account</option>';
-    
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      const option = document.createElement("option");
-      option.value = data.name;
-      option.textContent = data.name;
-      dropdown.appendChild(option);
-    });
-  } catch (err) {
-    console.error("Error loading Gmail list:", err);
-  }
-}
-
-// Add Gmail Popup
-const addGmailBtn = document.getElementById("addGmailBtn");
-const addGmailPopup = document.getElementById("addGmailPopup");
-const cancelAddGmail = document.getElementById("cancelAddGmail");
-const addGmailPopupForm = document.getElementById("addGmailPopupForm");
-
-if (addGmailBtn) {
-  addGmailBtn.addEventListener("click", () => {
-    addGmailPopup.classList.remove("hidden");
-    document.getElementById("newGmailName").value = "";
-  });
-}
-
-if (cancelAddGmail) {
-  cancelAddGmail.addEventListener("click", () => {
-    addGmailPopup.classList.add("hidden");
-  });
-}
-
-if (addGmailPopupForm) {
-  addGmailPopupForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    
-    const gmailName = document.getElementById("newGmailName").value.trim();
-    
-    if (!gmailName) {
-      showAlert("Please enter Gmail account name");
-      return;
-    }
-    
-    showLoader();
-    
-    try {
-      await addDoc(collection(db, "gmailList"), {
-        name: gmailName,
-        createdAt: serverTimestamp()
-      });
-      
-      addGmailPopup.classList.add("hidden");
-      await loadGmailList();
-      hideLoader();
-      showAlert("Gmail account added to dropdown!");
-    } catch (err) {
-      console.error(err);
-      hideLoader();
-      showAlert("Failed to add Gmail account");
-    }
-  });
-}
-
-// ============== EMAIL TRACKING SYSTEM ==============
 
 function formatDate(date) {
   if (!date) return "N/A";
@@ -332,7 +382,290 @@ function calculateNextDueDate(lastSentDate, currentStage, pattern) {
   return nextDate;
 }
 
-// Add Email Campaign Form
+// ============== LOGIN SYSTEM ==============
+const loginBtn = document.getElementById("loginBtn");
+if (loginBtn) {
+  loginBtn.addEventListener("click", loginHandler);
+}
+
+function loginHandler() {
+  const pass = document.getElementById("adminPass").value;
+  if (pass === PASS) {
+    localStorage.setItem("adminLoggedIn", "true");
+    showAdminSection();
+  } else {
+    const errorMsg = document.getElementById("errorMsg");
+    if (errorMsg) errorMsg.classList.remove("hidden");
+  }
+}
+
+if (localStorage.getItem("adminLoggedIn") === "true") {
+  showAdminSection();
+}
+
+function showAdminSection() {
+  const passwordSection = document.getElementById("passwordSection");
+  const adminSection = document.getElementById("adminSection");
+  const logoutBtn = document.getElementById("logoutBtn");
+  
+  if (passwordSection) passwordSection.classList.add("hidden");
+  if (adminSection) adminSection.classList.remove("hidden");
+  if (logoutBtn) logoutBtn.classList.remove("hidden");
+  
+  loadPending();
+  loadContacts();
+  loadGmailList();
+  loadGmailAccounts();
+  loadTodayDue();
+  checkPatternSettings();
+  
+  // FIXED: Setup notifications based on current permission
+  if (Notification.permission === 'granted') {
+    notificationPermissionGranted = true;
+    // Setup listeners immediately
+    setupAllListeners();
+    // Refresh token
+    requestNotificationPermission();
+  } else if (Notification.permission === 'default') {
+    // Show popup to request permission
+    showNotificationPopup();
+  } else {
+    // Permission denied - setup listeners anyway for UI updates
+    setupAllListeners();
+    console.log('⚠️ Notifications denied - UI will still update');
+  }
+}
+
+// ============== TABS ==============
+const tabTestimonials = document.getElementById("tabTestimonials");
+const tabContacts = document.getElementById("tabContacts");
+const tabEmailTracking = document.getElementById("tabEmailTracking");
+
+const testimonialSection = document.getElementById("testimonialSection");
+const contactSection = document.getElementById("contactSection");
+const emailTrackingSection = document.getElementById("emailTrackingSection");
+
+const tabs = [tabTestimonials, tabContacts, tabEmailTracking];
+const sections = [testimonialSection, contactSection, emailTrackingSection];
+
+function activateTab(activeTab) {
+  tabs.forEach((tab, i) => {
+    if (tab === activeTab) {
+      tab.classList.add("bg-sky-900", "text-white");
+      tab.classList.remove("bg-gray-300", "text-black");
+      if (sections[i]) sections[i].classList.remove("hidden");
+    } else {
+      tab.classList.remove("bg-sky-900", "text-white");
+      tab.classList.add("bg-gray-300", "text-black");
+      if (sections[i]) sections[i].classList.add("hidden");
+    }
+  });
+}
+
+if (tabTestimonials) tabTestimonials.addEventListener("click", () => activateTab(tabTestimonials));
+if (tabContacts) tabContacts.addEventListener("click", () => activateTab(tabContacts));
+if (tabEmailTracking) tabEmailTracking.addEventListener("click", () => activateTab(tabEmailTracking));
+
+if (tabTestimonials) activateTab(tabTestimonials);
+
+// ============== CONFIRMATION POPUP ==============
+function showConfirm(message, callback) {
+  const popup = document.getElementById("confirmPopup");
+  const msg = document.getElementById("confirmMessage");
+  const btnCancel = document.getElementById("confirmCancel");
+  const btnOk = document.getElementById("confirmOk");
+
+  if (!popup || !msg) return;
+
+  msg.textContent = message;
+  popup.classList.remove("hidden");
+
+  const close = () => popup.classList.add("hidden");
+
+  btnCancel.onclick = () => { close(); };
+  btnOk.onclick = async () => { close(); await callback(); };
+}
+
+// ============== PATTERN SETTINGS ==============
+async function checkPatternSettings() {
+  try {
+    const docRef = doc(db, "settings", "emailPattern");
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      showAlert("⚠️ Please set your cold email pattern first!");
+      const patternPopup = document.getElementById("patternSettingsPopup");
+      if (patternPopup) patternPopup.classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("Error checking pattern:", err);
+  }
+}
+
+async function getEmailPattern() {
+  try {
+    const docRef = doc(db, "settings", "emailPattern");
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      return docSnap.data().pattern || [0, 3, 9, 12];
+    }
+    return null;
+  } catch (err) {
+    console.error("Error getting pattern:", err);
+    return null;
+  }
+}
+
+const patternSettingsBtn = document.getElementById("patternSettingsBtn");
+const patternSettingsPopup = document.getElementById("patternSettingsPopup");
+const cancelPatternSettings = document.getElementById("cancelPatternSettings");
+const patternSettingsForm = document.getElementById("patternSettingsForm");
+
+if (patternSettingsBtn) {
+  patternSettingsBtn.addEventListener("click", async () => {
+    const pattern = await getEmailPattern();
+    const patternInput = document.getElementById("patternInput");
+    if (pattern && patternInput) {
+      patternInput.value = pattern.join(",");
+    }
+    if (patternSettingsPopup) patternSettingsPopup.classList.remove("hidden");
+  });
+}
+
+if (cancelPatternSettings) {
+  cancelPatternSettings.addEventListener("click", () => {
+    if (patternSettingsPopup) patternSettingsPopup.classList.add("hidden");
+  });
+}
+
+if (patternSettingsForm) {
+  patternSettingsForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    
+    const patternInput = document.getElementById("patternInput").value.trim();
+    
+    if (!patternInput) {
+      showAlert("Please enter a pattern!");
+      return;
+    }
+    
+    const patternArray = patternInput.split(",").map(day => parseInt(day.trim())).filter(day => !isNaN(day));
+    
+    if (patternArray.length === 0) {
+      showAlert("Invalid pattern! Use format like: 0,3,9,12");
+      return;
+    }
+    
+    showLoader();
+    
+    try {
+      const docRef = doc(db, "settings", "emailPattern");
+      await setDoc(docRef, {
+        pattern: patternArray,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      if (patternSettingsPopup) patternSettingsPopup.classList.add("hidden");
+      hideLoader();
+      showAlert(`✅ Pattern saved: ${patternArray.join(", ")} days`);
+    } catch (err) {
+      console.error("Error saving pattern:", err);
+      hideLoader();
+      showAlert(`Failed to save pattern: ${err.message}`);
+    }
+  });
+}
+
+const useCustomPattern = document.getElementById("useCustomPattern");
+const customPatternInputs = document.getElementById("customPatternInputs");
+
+if (useCustomPattern) {
+  useCustomPattern.addEventListener("change", () => {
+    if (customPatternInputs) {
+      if (useCustomPattern.checked) {
+        customPatternInputs.classList.remove("hidden");
+      } else {
+        customPatternInputs.classList.add("hidden");
+      }
+    }
+  });
+}
+
+// ============== GMAIL LIST MANAGEMENT ==============
+async function loadGmailList() {
+  const dropdown = document.getElementById("gmailName");
+  if (!dropdown) return;
+  
+  try {
+    const q = query(collection(db, "gmailList"), orderBy("createdAt", "desc"));
+    const snapshot = await getDocs(q);
+    
+    dropdown.innerHTML = '<option value="">Select Gmail Account</option>';
+    
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      const option = document.createElement("option");
+      option.value = data.name;
+      option.textContent = data.name;
+      dropdown.appendChild(option);
+    });
+  } catch (err) {
+    console.error("Error loading Gmail list:", err);
+  }
+}
+
+const addGmailBtn = document.getElementById("addGmailBtn");
+const addGmailPopup = document.getElementById("addGmailPopup");
+const cancelAddGmail = document.getElementById("cancelAddGmail");
+const addGmailPopupForm = document.getElementById("addGmailPopupForm");
+
+if (addGmailBtn) {
+  addGmailBtn.addEventListener("click", () => {
+    if (addGmailPopup) addGmailPopup.classList.remove("hidden");
+    const newGmailName = document.getElementById("newGmailName");
+    if (newGmailName) newGmailName.value = "";
+  });
+}
+
+if (cancelAddGmail) {
+  cancelAddGmail.addEventListener("click", () => {
+    if (addGmailPopup) addGmailPopup.classList.add("hidden");
+  });
+}
+
+if (addGmailPopupForm) {
+  addGmailPopupForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    
+    const gmailName = document.getElementById("newGmailName").value.trim();
+    
+    if (!gmailName) {
+      showAlert("Please enter Gmail account name");
+      return;
+    }
+    
+    showLoader();
+    
+    try {
+      await addDoc(collection(db, "gmailList"), {
+        name: gmailName,
+        createdAt: serverTimestamp()
+      });
+      
+      if (addGmailPopup) addGmailPopup.classList.add("hidden");
+      await loadGmailList();
+      hideLoader();
+      showAlert("Gmail account added to dropdown!");
+    } catch (err) {
+      console.error(err);
+      hideLoader();
+      showAlert("Failed to add Gmail account");
+    }
+  });
+}
+
+// ============== EMAIL TRACKING SYSTEM ==============
 const addGmailForm = document.getElementById("addGmailForm");
 if (addGmailForm) {
   addGmailForm.addEventListener("submit", async (e) => {
@@ -349,7 +682,6 @@ if (addGmailForm) {
       return;
     }
     
-    // Get pattern
     let pattern;
     if (useCustom) {
       const customPatternInput = document.getElementById("customPatternInput").value.trim();
@@ -385,7 +717,7 @@ if (addGmailForm) {
       });
       
       addGmailForm.reset();
-      document.getElementById("customPatternInputs").classList.add("hidden");
+      if (customPatternInputs) customPatternInputs.classList.add("hidden");
       await loadGmailAccounts();
       await loadTodayDue();
       hideLoader();
@@ -398,7 +730,6 @@ if (addGmailForm) {
   });
 }
 
-// Load All Gmail Campaigns
 async function loadGmailAccounts() {
   const list = document.getElementById("gmailAccountsList");
   if (!list) return;
@@ -481,7 +812,6 @@ async function loadGmailAccounts() {
   }
 }
 
-// Load Today's Due Emails
 async function loadTodayDue() {
   const list = document.getElementById("todayDueList");
   if (!list) return;
@@ -547,7 +877,6 @@ async function loadTodayDue() {
   }
 }
 
-// Mark Email as Sent
 window.markAsSent = async function(id) {
   showLoader();
   try {
@@ -589,7 +918,6 @@ window.markAsSent = async function(id) {
   }
 };
 
-// Edit Gmail Campaign Popup
 function createEditGmailPopup(data, id) {
   const overlay = document.createElement("div");
   overlay.className = "fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 px-3 sm:px-4";
@@ -672,7 +1000,6 @@ window.openEditGmailPopup = async function (id) {
   createEditGmailPopup(gmailData, id);
 };
 
-// Delete Gmail Campaign
 window.deleteGmail = async function(id) {
   await showConfirm("Are you sure you want to delete this campaign?", async () => {
     showLoader();
@@ -691,10 +1018,14 @@ window.deleteGmail = async function(id) {
 };
 
 // ============== TESTIMONIALS ==============
-
 async function loadPending() {
   showLoader();
   const container = document.getElementById("pendingTestimonials");
+  if (!container) {
+    hideLoader();
+    return;
+  }
+  
   const q = query(collection(db, "testimonials"), orderBy("timestamp", "desc"));
   const snapshot = await getDocs(q);
   container.innerHTML = "";
@@ -741,10 +1072,14 @@ window.deleteTestimonial = async function (id) {
 };
 
 // ============== CONTACTS ==============
-
 async function loadContacts() {
   showLoader();
   const container = document.getElementById("clientContacts");
+  if (!container) {
+    hideLoader();
+    return;
+  }
+  
   const q = query(collection(db, "contacts"), orderBy("timestamp", "desc"));
   const snapshot = await getDocs(q);
   container.innerHTML = "";
@@ -842,9 +1177,11 @@ window.openEditContactPopup = async function (id) {
   createEditContactPopup(contactData, id);
 };
 
-// Logout
+// ============== LOGOUT ==============
 const logoutBtn = document.getElementById("logoutBtn");
-logoutBtn.addEventListener("click", () => {
-  localStorage.removeItem("adminLoggedIn");
-  location.reload();
-});
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", () => {
+    localStorage.removeItem("adminLoggedIn");
+    location.reload();
+  });
+}
