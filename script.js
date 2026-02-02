@@ -200,8 +200,16 @@ function calculateNextDueDate(lastSentDate, currentStage, pattern) {
   
   const lastDate = new Date(lastSentDate);
   const nextInterval = pattern[currentStage];
-  const nextDate = new Date(lastDate);
+  let nextDate = new Date(lastDate);
   nextDate.setDate(lastDate.getDate() + nextInterval);
+  
+  // Skip weekend logic
+  const dayOfWeek = nextDate.getDay();
+  if (dayOfWeek === 6) { // Saturday
+    nextDate.setDate(nextDate.getDate() + 2); // Move to Monday
+  } else if (dayOfWeek === 0) { // Sunday
+    nextDate.setDate(nextDate.getDate() + 1); // Move to Monday
+  }
   
   return nextDate;
 }
@@ -516,6 +524,21 @@ if (addGmailForm) {
     showLoader();
     
     try {
+      // Calculate first due date with weekend skip logic
+    const today = new Date();
+      today.setHours(0, 0, 0, 0); // Normalize to midnight
+      const firstInterval = pattern[0];
+      let firstDueDate = new Date(today);
+      firstDueDate.setDate(today.getDate() + firstInterval);
+
+      // Skip weekend logic for first due date
+      const dayOfWeek = firstDueDate.getDay();
+      if (dayOfWeek === 6) { // Saturday
+        firstDueDate.setDate(firstDueDate.getDate() + 2); // Move to Monday
+      } else if (dayOfWeek === 0) { // Sunday
+        firstDueDate.setDate(firstDueDate.getDate() + 1); // Move to Monday
+      }
+
       await addDoc(collection(db, "gmailAccounts"), {
         gmailName,
         startEmail,
@@ -523,7 +546,8 @@ if (addGmailForm) {
         label: campaignLabel || "",
         pattern: pattern,
         currentStage: 0,
-        lastSentDate: new Date().toISOString(),
+        lastSentDate: today.toISOString(),
+        nextDueDate: firstDueDate.toISOString(),
         createdAt: serverTimestamp()
       });
       
@@ -689,44 +713,57 @@ async function loadTodayDue() {
 }
 
 window.markAsSent = async function(id) {
-  showLoader();
-  try {
-    const docRef = doc(db, "gmailAccounts", id);
-    const docSnap = await getDocs(query(collection(db, "gmailAccounts")));
-    
-    let currentData = null;
-    docSnap.forEach((d) => {
-      if (d.id === id) currentData = d.data();
-    });
-    
-    if (!currentData) {
+  await showConfirm("Mark this email as sent?", async () => {
+    showLoader();
+    try {
+      const docRef = doc(db, "gmailAccounts", id);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) {
+        hideLoader();
+        return showAlert("Campaign not found!");
+      }
+
+      const data = docSnap.data();
+      const pattern = data.pattern || [0, 3, 9, 12];
+      const newStage = data.currentStage + 1;
+      
+      let nextDueDate = null;
+      if (newStage < pattern.length) {
+        const lastDate = new Date(data.lastSentDate);
+        const nextInterval = pattern[newStage];
+        nextDueDate = new Date(lastDate);
+        nextDueDate.setDate(lastDate.getDate() + nextInterval);
+        
+        // Skip weekend logic
+        const dayOfWeek = nextDueDate.getDay();
+        if (dayOfWeek === 6) { // Saturday
+          nextDueDate.setDate(nextDueDate.getDate() + 2); // Move to Monday
+        } else if (dayOfWeek === 0) { // Sunday
+          nextDueDate.setDate(nextDueDate.getDate() + 1); // Move to Monday
+        }
+      }
+      
+   // Normalize to midnight
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const updateData = {
+        currentStage: newStage,
+        lastSentDate: today.toISOString(),
+        nextDueDate: nextDueDate ? nextDueDate.toISOString() : null
+      };
+      
+      await updateDoc(docRef, updateData);
+      await loadGmailAccounts();
+      await loadTodayDue();
       hideLoader();
-      showAlert("Campaign not found");
-      return;
+      showAlert("Marked as sent!");
+    } catch (err) {
+      console.error(err);
+      hideLoader();
+      showAlert("Failed to update");
     }
-    
-    const pattern = currentData.pattern || [0, 3, 9, 12];
-    const newStage = currentData.currentStage + 1;
-    
-    await updateDoc(docRef, {
-      currentStage: newStage,
-      lastSentDate: new Date().toISOString()
-    });
-    
-    if (newStage >= pattern.length) {
-      showAlert("🎉 All emails completed for this campaign!");
-    } else {
-      showAlert(`✅ Marked as sent! Next email in ${pattern[newStage]} days.`);
-    }
-    
-    await loadGmailAccounts();
-    await loadTodayDue();
-    hideLoader();
-  } catch (err) {
-    console.error(err);
-    hideLoader();
-    showAlert("Failed to update");
-  }
+  });
 };
 
 function createEditGmailPopup(data, id) {
@@ -996,3 +1033,4 @@ if (logoutBtn) {
     location.reload();
   });
 }
+
